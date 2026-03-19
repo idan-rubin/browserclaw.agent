@@ -38,7 +38,7 @@ Rules:
 - "press_and_hold" for anti-bot challenges. Wait after, check if it worked. Try twice before asking user.
 - "ask_user" only when you need info you can't get from the page (MFA codes, credentials, preferences).
 - "done" when finished. Include "answer" if the task asked a question — be specific with what you found.
-- "fail" when the task is impossible. Say why.
+- "fail" when the task is impossible. In reasoning, give a SHORT summary: what you tried, why it failed, and any partial results you found. Don't dump your full scratchpad — the user sees this.
 - If a PLAYBOOK is provided, follow it. Deviate only if a step fails.
 
 Complex tasks:
