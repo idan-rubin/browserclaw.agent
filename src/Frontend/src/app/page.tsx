@@ -23,11 +23,11 @@ const EXAMPLES = [
   },
   {
     label: "NY driver's license renewal",
-    prompt: "Go to dmv.ny.gov and find what's needed to renew a driver's license in New York state. List the ID requirements, fees, and whether it can be done online or requires an in-person visit. If you encounter a human verification checkbox (like \"I'm not a robot\"), click it and wait for it to pass before continuing.",
+    prompt: "Go to dmv.ny.gov and find what's needed to renew a driver's license in New York state. List the ID requirements, fees, and whether it can be done online or requires an in-person visit.",
   },
   {
     label: "Compare health plans",
-    prompt: "Go to healthcare.gov and explore health insurance plans available in zip code 10001 for an individual. List the top 3 plans by monthly premium, showing plan name, insurer, monthly cost, and what they cover. If you encounter a human verification checkbox (like \"I'm not a robot\"), click it and wait for it to pass before continuing.",
+    prompt: "Go to healthcare.gov and explore health insurance plans available in zip code 10001 for an individual. List the top 3 plans by monthly premium, showing plan name, insurer, monthly cost, and what they cover.",
   },
 ];
 

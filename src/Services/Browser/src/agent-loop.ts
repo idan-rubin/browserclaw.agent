@@ -1,5 +1,6 @@
 import type { CrawlPage, BrowserClaw } from 'browserclaw';
 import { pressAndHold, detectAntiBot, enrichSnapshot, getPageText } from './skills/press-and-hold.js';
+import { detectCheckboxCaptcha, clickCheckboxCaptcha } from './skills/click-checkbox-captcha.js';
 import { detectPopup, dismissPopup } from './skills/dismiss-popup.js';
 import { detectLoop, loopRecoveryStep } from './skills/loop-detection.js';
 import { TabManager } from './skills/tab-manager.js';
@@ -35,7 +36,8 @@ Rules:
 - If something failed, try a different approach. Never repeat a failed action.
 - "type" clears the field first, then types.
 - After typing in any field, wait — then check for autocomplete dropdowns and click the matching option.
-- "press_and_hold" for anti-bot challenges. Wait after, check if it worked. Try twice before asking user.
+- "press_and_hold" for press-and-hold anti-bot challenges. Wait after, check if it worked. Try twice before asking user.
+- Checkbox captchas (reCAPTCHA "I'm not a robot", hCaptcha, Turnstile) are handled automatically. If auto-solve fails, try clicking the checkbox ref if visible, or ask_user.
 - "ask_user" only when you need info you can't get from the page (MFA codes, credentials, preferences).
 - "done" when finished. Include "answer" if the task asked a question — be specific with what you found.
 - "fail" when the task is impossible. In reasoning, give a SHORT summary: what you tried, why it failed, and any partial results you found. Don't dump your full scratchpad — the user sees this.
@@ -253,6 +255,22 @@ Respond with JSON: {"plan": "your plan here"}`,
     const domText = await getPageText(page);
     if (detectAntiBot(domText, snapshot)) {
       snapshot = enrichSnapshot(snapshot, domText);
+    }
+
+    // Auto-handle checkbox captchas (reCAPTCHA, hCaptcha, Turnstile)
+    if (detectCheckboxCaptcha(domText, snapshot)) {
+      logger.info({ step }, 'Checkbox captcha detected, attempting auto-solve');
+      emit('thinking', { step, message: 'Handling verification checkbox...' });
+      const solved = await clickCheckboxCaptcha(page);
+      if (solved) {
+        logger.info({ step }, 'Checkbox captcha solved');
+        emit('step', { step, action: 'click_checkbox_captcha', reasoning: 'Automatically solved verification checkbox' });
+        await page.waitFor({ timeMs: 2000 });
+        snapshot = await safeSnapshot(page);
+      } else {
+        logger.warn({ step }, 'Checkbox captcha not solved automatically');
+        snapshot = enrichSnapshot(snapshot, 'A checkbox captcha (e.g. "I\'m not a robot") is present but could not be auto-solved. It may require a visual puzzle. Try clicking the checkbox element if visible, or use ask_user to request help.');
+      }
     }
 
     emit('thinking', { step, message: `Analyzing page: ${title}` });
