@@ -5,7 +5,7 @@ import { logger } from '../logger.js';
 const PRESS_HOLD_PATTERN = /press.*hold|hold.*to.*confirm/i;
 const CLOUDFLARE_PATTERN = /performing security verification|cloudflare|verify you are human|just a moment/i;
 const ANTI_BOT_PATTERN = /press.*hold|verify.*human|not a bot|captcha/i;
-const HOLD_DURATION_MS = 5_000;
+const HOLD_DURATION_MS = 10_000;
 const MAX_WAIT_MS = 15_000;
 const POLL_INTERVAL_MS = 1_000;
 
@@ -153,21 +153,25 @@ export async function pressAndHold(page: CrawlPage): Promise<boolean> {
 
       await cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x, y, button: 'none' });
       await new Promise(r => setTimeout(r, 100));
-      logger.info({ x, y }, 'press-and-hold: mousePressed — holding until resolved');
+      logger.info({ x, y }, 'press-and-hold: mousePressed — holding until confirmed resolved');
       await cdp.send('Input.dispatchMouseEvent', { type: 'mousePressed', x, y, button: 'left', clickCount: 1 });
 
-      // Keep holding — check every second if the anti-bot is gone
-      while (true) {
+      // Hold and check — text must stay gone for 3 consecutive checks to confirm resolved
+      let consecutiveClear = 0;
+      while (consecutiveClear < 3) {
         await page.waitFor({ timeMs: POLL_INTERVAL_MS });
         const currentUrl = await page.url();
         if (currentUrl !== urlBefore) {
           logger.info({ urlBefore, currentUrl }, 'press-and-hold: URL changed while holding');
+          consecutiveClear = 3;
           break;
         }
-        const resolved = await page.evaluate(`!(document.body && document.body.innerText && document.body.innerText.match(/press.*hold|verify.*human|not a bot/i))`);
-        if (resolved) {
-          logger.info('press-and-hold: anti-bot text gone while holding');
-          break;
+        const textGone = await page.evaluate(`!(document.body && document.body.innerText && document.body.innerText.match(/press.*hold|verify.*human|not a bot/i))`);
+        if (textGone) {
+          consecutiveClear++;
+          logger.info({ consecutiveClear }, 'press-and-hold: text gone, confirming');
+        } else {
+          consecutiveClear = 0;
         }
       }
 
