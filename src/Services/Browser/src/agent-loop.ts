@@ -258,7 +258,7 @@ Respond with JSON: {"plan": "your plan here"}`,
     }
 
     // Auto-handle checkbox captchas (reCAPTCHA, hCaptcha, Turnstile)
-    if (detectCheckboxCaptcha(domText, snapshot)) {
+    if (await detectCheckboxCaptcha(page, domText, snapshot)) {
       logger.info({ step }, 'Checkbox captcha detected, attempting auto-solve');
       emit('thinking', { step, message: 'Handling verification checkbox...' });
       const solved = await clickCheckboxCaptcha(page);

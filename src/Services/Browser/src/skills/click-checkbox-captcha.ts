@@ -102,13 +102,27 @@ async function findCaptchaIframes(page: CrawlPage): Promise<CaptchaIframeInfo[]>
 
 /**
  * Detect whether the page has a checkbox-style captcha.
+ * Two detection paths:
+ *   1. Text-based: domText contains captcha keywords (cheap but unreliable for cross-origin iframes)
+ *   2. Iframe-based: scan DOM for captcha iframes by src/title (reliable, catches hidden ones)
  */
-export function detectCheckboxCaptcha(domText: string, snapshot: string): boolean {
-  // Check for captcha-related text that isn't already handled by press-and-hold
-  const hasCheckboxCaptcha = /i.m not a robot|i\'m not a robot|recaptcha|hcaptcha|verify you.re human|verify you are human|human verification/i.test(domText);
+export async function detectCheckboxCaptcha(page: CrawlPage, domText: string, snapshot: string): Promise<boolean> {
   // Don't trigger if it's a press-and-hold style (that skill handles those)
   const isPressAndHold = /press.*hold|hold.*to.*confirm/i.test(domText);
-  return hasCheckboxCaptcha && !isPressAndHold;
+  if (isPressAndHold) return false;
+
+  // Path 1: text-based detection (fast, but misses cross-origin iframes)
+  const hasCheckboxText = /i.m not a robot|i\'m not a robot|recaptcha|hcaptcha|verify you.re human|verify you are human|human verification/i.test(domText);
+  if (hasCheckboxText) return true;
+
+  // Path 2: iframe-based detection (catches hidden/cross-origin captchas)
+  const iframes = await findCaptchaIframes(page);
+  if (iframes.length > 0) {
+    logger.info({ count: iframes.length, types: iframes.map(f => f.type) }, 'checkbox-captcha: detected via iframe scan (not visible in text)');
+    return true;
+  }
+
+  return false;
 }
 
 /**
