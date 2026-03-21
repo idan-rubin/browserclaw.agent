@@ -146,45 +146,34 @@ export async function pressAndHold(page: CrawlPage): Promise<boolean> {
     const { x, y } = coords;
     logger.info({ x, y }, 'press-and-hold: found button, opening CDP');
 
+    const urlBefore = await page.url();
     const cdp = await openCdpConnection(page);
     logger.info('press-and-hold: CDP connected');
     try {
-      const urlBefore = await page.url();
 
       await cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x, y, button: 'none' });
       await new Promise(r => setTimeout(r, 100));
-      logger.info({ x, y }, 'press-and-hold: mousePressed');
+      logger.info({ x, y }, 'press-and-hold: mousePressed, holding 10s');
       await cdp.send('Input.dispatchMouseEvent', { type: 'mousePressed', x, y, button: 'left', clickCount: 1 });
-
-      // Hold for 10s without checking — animation causes false positives during this window
       await new Promise(r => setTimeout(r, HOLD_DURATION_MS));
-      logger.info('press-and-hold: 10s hold complete, now actively monitoring');
-
-      // Keep holding and check every second — no max timeout
-      while (true) {
-        await page.waitFor({ timeMs: POLL_INTERVAL_MS });
-        const currentUrl = await page.url();
-        if (currentUrl !== urlBefore) {
-          logger.info({ urlBefore, currentUrl }, 'press-and-hold: URL changed');
-          break;
-        }
-        const stillBlocked = await page.evaluate(`!!(document.body && document.body.innerText && document.body.innerText.match(/press.*hold|verify.*human|not a bot/i))`);
-        if (!stillBlocked) {
-          logger.info('press-and-hold: resolved');
-          break;
-        }
-      }
-
       await cdp.send('Input.dispatchMouseEvent', { type: 'mouseReleased', x, y, button: 'left', clickCount: 1 });
-      logger.info('press-and-hold: mouseReleased');
+      logger.info('press-and-hold: released after 10s');
     } finally {
       cdp.close();
     }
     await page.waitFor({ timeMs: 2000 });
 
-    const stillBlocked = await page.evaluate(`!!document.body.innerText.match(/press.*hold|verify.*human|not a bot|access.*denied/i)`);
-    logger.info({ stillBlocked }, 'press-and-hold: result');
-    return !stillBlocked;
+    const stillBlocked = await page.evaluate(`!!(document.body && document.body.innerText && document.body.innerText.match(/press.*hold|verify.*human|not a bot|access.*denied/i))`);
+    if (stillBlocked) {
+      logger.info('press-and-hold: still blocked, refreshing page');
+      await page.goto(urlBefore);
+      await page.waitFor({ timeMs: 3000 });
+      const blockedAfterRefresh = await page.evaluate(`!!(document.body && document.body.innerText && document.body.innerText.match(/press.*hold|verify.*human|not a bot|access.*denied/i))`);
+      logger.info({ blockedAfterRefresh }, 'press-and-hold: result after refresh');
+      return !blockedAfterRefresh;
+    }
+    logger.info('press-and-hold: resolved');
+    return true;
   } catch (err) {
     logger.error({ err: err instanceof Error ? err.message : err }, 'press-and-hold: failed');
     return false;
