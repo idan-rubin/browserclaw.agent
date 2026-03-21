@@ -36,7 +36,7 @@ Rules:
 - If something failed, try a different approach. Never repeat a failed action.
 - "type" clears the field first, then types.
 - After typing in any field, wait — then check for autocomplete dropdowns and click the matching option.
-- "press_and_hold" for press-and-hold anti-bot challenges. Wait after, check if it worked. Try twice before asking user.
+- "press_and_hold" for press-and-hold anti-bot challenges. Wait after, check if it worked. If the challenge cleared but the page still looks the same (no new content loaded), refresh the page by navigating to the current URL. Try twice before asking user.
 - "click_cloudflare" for Cloudflare security checks ("Verify you are human" checkbox). The system will find and click the checkbox. Wait after, check if it worked. Try twice before asking user.
 - "ask_user" only when you need info you can't get from the page (MFA codes, credentials, preferences).
 - "done" when finished. Include "answer" if the task asked a question — be specific with what you found.
