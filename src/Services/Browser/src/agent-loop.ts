@@ -239,7 +239,7 @@ async function executeAction(action: AgentAction, page: CrawlPage): Promise<void
 
     case 'keyboard':
       if (!action.key) throw new Error('keyboard action requires key');
-      await page.keyboard(action.key);
+      await page.press(action.key);
       break;
 
     case 'select':
@@ -286,6 +286,7 @@ export async function runAgentLoop(
   waitForUser?: () => Promise<string>,
   browser?: BrowserClaw,
   domainSkill?: CatalogSkill | null,
+  maxSteps = MAX_STEPS,
 ): Promise<AgentLoopResult> {
   const history: AgentStep[] = [];
   const startTime = Date.now();
@@ -321,7 +322,7 @@ Respond with JSON: {"plan": "your plan here"}`,
     logger.error({ err }, 'Failed to generate plan');
   }
 
-  for (let step = 0; step < MAX_STEPS; step++) {
+  for (let step = 0; step < maxSteps; step++) {
     if (signal.aborted) {
       return {
         success: false,
@@ -356,8 +357,9 @@ Respond with JSON: {"plan": "your plan here"}`,
       }
     }
     const skillForStep = (step <= SKILL_INJECT_MAX_STEP) ? domainSkill : undefined;
-    const stepsRemaining = MAX_STEPS - step;
-    const userMessage = buildUserMessage(prompt, snapshot, history, url, title, planText, tabCount, skillForStep, stepsRemaining);
+    const planForStep = (step <= SKILL_INJECT_MAX_STEP) ? planText : null;
+    const stepsRemaining = maxSteps - step - 1;
+    const userMessage = buildUserMessage(prompt, snapshot, history, url, title, planForStep, tabCount, skillForStep, stepsRemaining);
 
     let action: AgentAction;
     try {
@@ -501,13 +503,13 @@ Respond with JSON: {"plan": "your plan here"}`,
     await page.waitFor({ timeMs: waitMs });
   }
 
-  // MAX_STEPS reached
-  logger.warn({ steps: history.length, maxSteps: MAX_STEPS }, 'Agent hit step limit');
+  // maxSteps reached
+  logger.warn({ steps: history.length, maxSteps }, 'Agent hit step limit');
   const lastReasoning = history.length > 0 ? history[history.length - 1].action.reasoning : '';
   return {
     success: false,
     steps: history,
-    error: `Reached maximum step limit (${MAX_STEPS}). Last reasoning: ${lastReasoning.substring(0, 200)}`,
+    error: `Reached maximum step limit (${maxSteps}). Last reasoning: ${lastReasoning.substring(0, 200)}`,
     duration_ms: Date.now() - startTime,
     final_url: history.length > 0 ? history[history.length - 1].url : undefined,
   };

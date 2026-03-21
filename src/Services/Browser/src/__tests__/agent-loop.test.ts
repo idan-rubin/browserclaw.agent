@@ -67,7 +67,7 @@ function mockPage() {
     goto: vi.fn().mockResolvedValue(undefined),
     select: vi.fn().mockResolvedValue(undefined),
     evaluate: vi.fn().mockResolvedValue(''),
-    keyboard: vi.fn().mockResolvedValue(undefined),
+    press: vi.fn().mockResolvedValue(undefined),
     waitFor: vi.fn().mockResolvedValue(undefined),
     id: 'test-page-id',
   } as any; // eslint-disable-line @typescript-eslint/no-explicit-any
@@ -235,7 +235,7 @@ describe('runAgentLoop', () => {
 
     await runAgentLoop('Submit the form', page, emit, controller.signal);
 
-    expect(page.keyboard).toHaveBeenCalledWith('Enter');
+    expect(page.press).toHaveBeenCalledWith('Enter');
   });
 
   it('executes back action correctly', async () => {
@@ -291,11 +291,6 @@ describe('runAgentLoop', () => {
   });
 
   it('fails when MAX_STEPS is reached', async () => {
-    const config = await import('../config.js');
-    const originalMaxSteps = config.MAX_STEPS;
-    // Override MAX_STEPS to 3 for this test
-    (config as any).MAX_STEPS = 3; // eslint-disable-line @typescript-eslint/no-explicit-any
-
     mockedLlmJson
       .mockResolvedValueOnce({ plan: 'Scroll forever' })
       .mockResolvedValue({ action: 'scroll', reasoning: 'Keep scrolling', direction: 'down' });
@@ -304,12 +299,10 @@ describe('runAgentLoop', () => {
     const emit = vi.fn();
     const controller = new AbortController();
 
-    const result = await runAgentLoop('Scroll', page, emit, controller.signal);
+    const result = await runAgentLoop('Scroll', page, emit, controller.signal, undefined, undefined, undefined, 3);
 
     expect(result.success).toBe(false);
     expect(result.error).toContain('maximum step limit');
     expect(result.steps).toHaveLength(3);
-
-    (config as any).MAX_STEPS = originalMaxSteps; // eslint-disable-line @typescript-eslint/no-explicit-any
   });
 });
