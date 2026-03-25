@@ -474,9 +474,7 @@ export async function runAgentLoop(
   const startTime = Date.now();
   const tabManager = browser !== undefined ? new TabManager(page) : null;
   let consecutiveParseFailures = 0;
-  let consecutiveActionFailures = 0;
   const MAX_PARSE_FAILURES = 3;
-  const MAX_ACTION_FAILURES = 3;
 
   let planText: string | null = null;
   try {
@@ -690,7 +688,6 @@ Respond with JSON: {"plan": "your plan here"}`,
 
       try {
         await executeAction(action, page);
-        consecutiveActionFailures = 0;
 
         // After typing, detect autocomplete/combobox fields
         if (action.action === 'type') {
@@ -708,59 +705,10 @@ Respond with JSON: {"plan": "your plan here"}`,
           }
         }
       } catch (err) {
-        consecutiveActionFailures++;
         const message = err instanceof Error ? err.message : 'Action execution failed';
-        logger.error(
-          {
-            step,
-            action: action.action,
-            attempt: consecutiveActionFailures,
-            maxAttempts: MAX_ACTION_FAILURES,
-            error: message,
-          },
-          'Action execution failed',
-        );
+        logger.error({ step, action: action.action, error: message }, 'Action execution failed');
         emit('step_error', { step, action: action.action, error: message });
         agentStep.action.error_feedback = message;
-
-        if (consecutiveActionFailures >= MAX_ACTION_FAILURES) {
-          logger.warn({ step, consecutiveActionFailures }, 'Too many consecutive action failures');
-
-          if (waitForUser !== undefined) {
-            const errors = history
-              .slice(-MAX_ACTION_FAILURES)
-              .filter((s) => s.action.error_feedback !== undefined)
-              .map((s) => s.action.error_feedback)
-              .join('; ');
-            emit('ask_user', {
-              step,
-              question: `I've failed ${String(MAX_ACTION_FAILURES)} actions in a row (${errors}). Can you help me get past this, or should I give up?`,
-            });
-
-            try {
-              const userResponse = await waitForUser();
-              agentStep.user_response = userResponse;
-              emit('user_response', { step, text: userResponse });
-              consecutiveActionFailures = 0;
-              step++;
-              break;
-            } catch (waitErr) {
-              const waitMsg = waitErr instanceof Error ? waitErr.message : 'No response';
-              logger.warn({ step, error: waitMsg }, 'User did not respond to failure prompt — aborting');
-            }
-          }
-
-          const failSummary = await getFinalSummary(prompt, history);
-          return {
-            success: false,
-            steps: history,
-            answer: failSummary,
-            error: `${String(MAX_ACTION_FAILURES)} consecutive action failures — aborting`,
-            duration_ms: Date.now() - startTime,
-            final_url: agentStep.url,
-          };
-        }
-
         await page.waitFor({ timeMs: 1000 });
 
         if (await detectPopup(page)) {
