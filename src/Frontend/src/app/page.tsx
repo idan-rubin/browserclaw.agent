@@ -231,7 +231,8 @@ export default function HomePage() {
                     autoResize();
                   }}
                   onKeyDown={(e) => {
-                    if (e.key === 'Enter' && !e.shiftKey) {
+                    const isMobile = 'ontouchstart' in window;
+                    if (e.key === 'Enter' && !e.shiftKey && !isMobile) {
                       e.preventDefault();
                       if (hasApiKey) void handleRun();
                     }
@@ -449,7 +450,11 @@ export default function HomePage() {
 
       {/* Processing Modal */}
       {modal?.type === 'processing' && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm px-4">
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm px-4"
+        >
           <div className="w-full max-w-sm rounded-2xl border border-border bg-card p-6 shadow-xl">
             <h3 className="text-lg font-semibold">Starting run</h3>
             <div className="mt-5 space-y-4">
@@ -481,7 +486,11 @@ export default function HomePage() {
 
       {/* Blocked Modal */}
       {modal?.type === 'blocked' && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm px-4">
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm px-4"
+        >
           <div className="w-full max-w-md rounded-2xl border border-border bg-card p-6 shadow-xl">
             <div className="flex items-start gap-3">
               <div className="mt-0.5 shrink-0 rounded-full bg-amber-500/10 p-2 text-amber-500">

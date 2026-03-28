@@ -6,8 +6,14 @@ import type { LlmConfig } from './types.js';
 
 const LLM_TIMEOUT_MS = parseInt(process.env.LLM_TIMEOUT_MS ?? '30000', 10);
 
-// ── BYOK: per-session LLM config via AsyncLocalStorage ──────────────────────
-const sessionLlmStore = new AsyncLocalStorage<LlmConfig>();
+// ── Per-session context via AsyncLocalStorage ──────────────────────────────
+interface SessionLlmContext {
+  llmConfig: LlmConfig;
+  llmCallCount: number;
+  byokClient?: OpenAI;
+}
+
+const sessionLlmStore = new AsyncLocalStorage<SessionLlmContext>();
 
 /**
  * Run an async function with a BYOK LLM config scoped to the current async context.
@@ -15,7 +21,7 @@ const sessionLlmStore = new AsyncLocalStorage<LlmConfig>();
  * instead of the server's environment variables.
  */
 export function runWithLlmConfig<T>(config: LlmConfig, fn: () => Promise<T>): Promise<T> {
-  return sessionLlmStore.run(config, fn);
+  return sessionLlmStore.run({ llmConfig: config, llmCallCount: 0 }, fn);
 }
 
 const BYOK_PROVIDERS: Record<string, { baseURL: string; useMaxCompletionTokens: boolean }> = {
@@ -242,15 +248,22 @@ async function callLLM(provider: ProviderConfig, model: string, req: LLMRequest)
   return callChatCompletions(provider, model, req);
 }
 
-// NOTE: this counter is shared across concurrent sessions — counts are approximate under concurrency
-let _llmCallCount = 0;
+// Per-session LLM call counter backed by AsyncLocalStorage.
+// Falls back to a module-level counter for calls outside a session context.
+let _fallbackLlmCallCount = 0;
 
 export function getLLMCallCount(): number {
-  return _llmCallCount;
+  const ctx = sessionLlmStore.getStore();
+  return ctx ? ctx.llmCallCount : _fallbackLlmCallCount;
 }
 
 export function resetLLMCallCount(): void {
-  _llmCallCount = 0;
+  const ctx = sessionLlmStore.getStore();
+  if (ctx) {
+    ctx.llmCallCount = 0;
+  } else {
+    _fallbackLlmCallCount = 0;
+  }
 }
 
 async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: string): Promise<T> {
@@ -287,15 +300,21 @@ function getByokClient(config: LlmConfig, providerConfig: ProviderConfig): OpenA
 }
 
 export async function llm(req: LLMRequest): Promise<LLMResponse> {
-  _llmCallCount++;
+  const ctx = sessionLlmStore.getStore();
+  if (ctx) {
+    ctx.llmCallCount++;
+  } else {
+    _fallbackLlmCallCount++;
+  }
 
   // Check for BYOK session config first
-  const byokConfig = sessionLlmStore.getStore();
-  if (byokConfig) {
+  if (ctx) {
+    const byokConfig = ctx.llmConfig;
     const providerConfig = resolveByokProvider(byokConfig);
-    const client = getByokClient(byokConfig, providerConfig);
+    // Cache the BYOK client in the session context to avoid creating a new one per call
+    ctx.byokClient ??= getByokClient(byokConfig, providerConfig);
     return await withTimeout(
-      callChatCompletions(providerConfig, byokConfig.model, req, client),
+      callChatCompletions(providerConfig, byokConfig.model, req, ctx.byokClient),
       LLM_TIMEOUT_MS,
       'LLM call (BYOK)',
     );

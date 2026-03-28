@@ -94,8 +94,13 @@ const routes: Route[] = [
     handler: async ({ req, res, clientIp }) => {
       const body = await parseBody<CreateSessionRequest>(req);
 
-      if (body.prompt.trim().length === 0) {
-        sendError(res, 400, 'prompt is required');
+      if (typeof body.prompt !== 'string' || body.prompt.trim().length === 0) {
+        sendError(res, 400, 'prompt is required and must be a non-empty string');
+        return;
+      }
+
+      if (body.headless !== undefined && typeof body.headless !== 'boolean') {
+        sendError(res, 400, 'headless must be a boolean');
         return;
       }
 
@@ -199,11 +204,11 @@ const routes: Route[] = [
     paramNames: ['id'],
     handler: async ({ req, res, params }) => {
       const body = await parseBody<{ text: string }>(req);
-      const text = body.text.trim();
-      if (text.length === 0) {
-        sendError(res, 400, 'text is required');
+      if (typeof body.text !== 'string' || body.text.trim().length === 0) {
+        sendError(res, 400, 'text is required and must be a non-empty string');
         return;
       }
+      const text = body.text.trim();
       if (text.length > 10_000) {
         sendError(res, 400, 'text must be under 10000 characters');
         return;

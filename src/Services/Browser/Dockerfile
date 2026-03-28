@@ -38,6 +38,10 @@ RUN npm prune --omit=dev
 COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 COPY docker-entrypoint.sh /docker-entrypoint.sh
 
+RUN groupadd -r browser && useradd -r -g browser -G audio,video browser
+
+USER browser
+
 EXPOSE 5040
 EXPOSE 6080
 

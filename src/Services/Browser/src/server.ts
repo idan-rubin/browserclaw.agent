@@ -33,7 +33,13 @@ function checkAndRecordHit(ip: string): boolean {
   return true;
 }
 
+const IP_HITS_MAX_ENTRIES = 10_000;
+
 const ipCleanupInterval = setInterval(() => {
+  if (ipHits.size > IP_HITS_MAX_ENTRIES) {
+    ipHits.clear();
+    return;
+  }
   const now = Date.now();
   for (const [ip, hits] of ipHits) {
     const active = hits.filter((t) => now - t < rateLimitWindowMs);

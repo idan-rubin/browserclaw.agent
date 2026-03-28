@@ -4,20 +4,17 @@ services:
     image: minio/minio:latest
     command: server /data --console-address ":9001"
     environment:
-      MINIO_ROOT_USER: minioadmin
-      MINIO_ROOT_PASSWORD: minioadmin
-    ports:
-      - "9000:9000"
-      - "9001:9001"
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
     volumes:
       - minio_data:/data
+    networks:
+      - internal
 
   # ─── Reverse Proxy ──────────────────────────────────────────────
   traefik:
     image: traefik:v3.4
     command:
-      - "--api.dashboard=true"
-      - "--api.insecure=true"
       - "--providers.docker=true"
       - "--providers.docker.exposedbydefault=false"
       - "--providers.docker.endpoint=unix:///var/run/docker.sock"
@@ -25,9 +22,10 @@ services:
       - "--log.level=INFO"
     ports:
       - "80:80"
-      - "8081:8080" # Traefik dashboard
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - public
 
   # ─── Frontend ───────────────────────────────────────────────────
   frontend:
@@ -45,6 +43,9 @@ services:
       - "traefik.http.routers.frontend.entrypoints=web"
       - "traefik.http.routers.frontend.priority=1"
       - "traefik.http.services.frontend.loadbalancer.server.port=3000"
+    networks:
+      - public
+      - internal
 
   # ─── Browser Service ───────────────────────────────────────────
   browser:
@@ -57,12 +58,9 @@ services:
       PORT: "5040"
       BROWSER_HEADLESS: "false"
       MINIO_ENDPOINT: "http://minio:9000"
-      MINIO_ACCESS_KEY: "minioadmin"
-      MINIO_SECRET_KEY: "minioadmin"
+      MINIO_ACCESS_KEY: "${MINIO_ROOT_USER:-minioadmin}"
+      MINIO_SECRET_KEY: "${MINIO_ROOT_PASSWORD:-minioadmin}"
       MINIO_BUCKET: "browserclaw-skills"
-    ports:
-      - "5040:5040"
-      - "6080:6080"
     volumes:
       - prompt_logs:/app/data/prompts
     labels:
@@ -73,7 +71,15 @@ services:
       - "traefik.http.routers.browser.middlewares=strip-vnc"
       - "traefik.http.middlewares.strip-vnc.stripprefix.prefixes=/vnc"
       - "traefik.http.services.browser.loadbalancer.server.port=6080"
+    networks:
+      - internal
 
 volumes:
   minio_data:
   prompt_logs:
+
+networks:
+  public:
+    driver: bridge
+  internal:
+    driver: bridge

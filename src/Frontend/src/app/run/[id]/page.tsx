@@ -14,8 +14,12 @@ const SESSION_DURATION_MS = 5 * 60 * 1000;
 const VNC_BASE = process.env.NEXT_PUBLIC_VNC_URL ?? '/vnc';
 const vncUrl = `${VNC_BASE}/vnc.html?autoconnect=true&resize=scale&view_only=true${VNC_BASE === '/vnc' ? '&path=vnc/websockify' : ''}`;
 
-function parseEventData(e: MessageEvent): Record<string, unknown> {
-  return JSON.parse(String(e.data)) as Record<string, unknown>;
+function parseEventData(e: MessageEvent): Record<string, unknown> | undefined {
+  try {
+    return JSON.parse(String(e.data)) as Record<string, unknown>;
+  } catch {
+    return undefined;
+  }
 }
 
 export default function RunPage({ params }: { params: Promise<{ id: string }> }) {
@@ -71,11 +75,13 @@ export default function RunPage({ params }: { params: Promise<{ id: string }> })
 
     eventSource.addEventListener('plan', (e: MessageEvent) => {
       const data = parseEventData(e);
+      if (!data) return;
       setPlan({ prompt: String(data.prompt), plan: String(data.plan) });
     });
 
     eventSource.addEventListener('thinking', (e: MessageEvent) => {
       const data = parseEventData(e);
+      if (!data) return;
       const sec = Math.floor((Date.now() - startTime.current) / 1000);
       setEntries((prev) => [
         ...prev,
@@ -85,6 +91,7 @@ export default function RunPage({ params }: { params: Promise<{ id: string }> })
 
     eventSource.addEventListener('step', (e: MessageEvent) => {
       const data = parseEventData(e);
+      if (!data) return;
       const sec = Math.floor((Date.now() - startTime.current) / 1000);
       setEntries((prev) => [
         ...prev,
@@ -104,6 +111,7 @@ export default function RunPage({ params }: { params: Promise<{ id: string }> })
     eventSource.addEventListener('completed', (e: MessageEvent) => {
       terminated = true;
       const data = parseEventData(e);
+      if (!data) return;
       if (typeof data.answer === 'string' && data.answer !== '') setAnswer(data.answer);
       setSkillStats({
         llm_calls: Number(data.llm_calls),
@@ -117,6 +125,7 @@ export default function RunPage({ params }: { params: Promise<{ id: string }> })
     eventSource.addEventListener('failed', (e: MessageEvent) => {
       terminated = true;
       const data = parseEventData(e);
+      if (!data) return;
       setStatus('failed');
       setError(String(data.error));
       eventSource.close();
@@ -131,6 +140,7 @@ export default function RunPage({ params }: { params: Promise<{ id: string }> })
 
     eventSource.addEventListener('skill_generated', (e: MessageEvent) => {
       const data = parseEventData(e);
+      if (!data) return;
       setSkill(data.skill as SkillOutput);
     });
 
@@ -141,31 +151,37 @@ export default function RunPage({ params }: { params: Promise<{ id: string }> })
 
     eventSource.addEventListener('skills_loaded', (e: MessageEvent) => {
       const data = parseEventData(e);
+      if (!data) return;
       addSkillEvent(`Loaded skill "${String(data.title)}" for ${String(data.domain)}`);
     });
 
     eventSource.addEventListener('skill_improved', (e: MessageEvent) => {
       const data = parseEventData(e);
+      if (!data) return;
       addSkillEvent(`Skill improved: ${String(data.previous_steps)} → ${String(data.new_steps)} steps`);
     });
 
     eventSource.addEventListener('skill_validated', (e: MessageEvent) => {
       const data = parseEventData(e);
+      if (!data) return;
       addSkillEvent(`Skill validated: "${String(data.title)}" (run #${String(data.run_count)})`);
     });
 
     eventSource.addEventListener('skill_saved', (e: MessageEvent) => {
       const data = parseEventData(e);
+      if (!data) return;
       addSkillEvent(`New skill saved: "${String(data.title)}"`);
     });
 
     eventSource.addEventListener('domain_skills', (e: MessageEvent) => {
       const data = parseEventData(e);
+      if (!data) return;
       if (Array.isArray(data.skills)) setDomainSkills(data.skills as DomainSkillEntry[]);
     });
 
     eventSource.addEventListener('ask_user', (e: MessageEvent) => {
       const data = parseEventData(e);
+      if (!data) return;
       const sec = Math.floor((Date.now() - startTime.current) / 1000);
       setPendingQuestion(String(data.question));
       setStatus('waiting_for_user');
@@ -177,6 +193,7 @@ export default function RunPage({ params }: { params: Promise<{ id: string }> })
 
     eventSource.addEventListener('user_response', (e: MessageEvent) => {
       const data = parseEventData(e);
+      if (!data) return;
       const sec = Math.floor((Date.now() - startTime.current) / 1000);
       setStatus('running');
       setEntries((prev) => [
