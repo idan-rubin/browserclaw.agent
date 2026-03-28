@@ -111,7 +111,7 @@ export default function HomePage() {
     return undefined;
   }, [autoResize]);
 
-  const hasApiKey = !!llm.apiKey.trim();
+  const hasApiKey = llm.apiKey.trim() !== '';
 
   async function handleRun(skipModeration = false) {
     const trimmed = prompt.trim();
