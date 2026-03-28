@@ -160,6 +160,7 @@ export function LlmConfigPanel({
               onChange={(e) => {
                 setProvider(e.target.value as LlmConfig['provider']);
               }}
+              aria-label="LLM Provider"
               className={`${SELECT_CLASS} sm:w-40`}
             >
               {PROVIDERS.map((p) => (
@@ -174,6 +175,7 @@ export function LlmConfigPanel({
               onChange={(e) => {
                 setModel(e.target.value);
               }}
+              aria-label="Model"
               className={`${SELECT_CLASS} sm:w-48`}
             >
               {models.map((m) => (
@@ -190,6 +192,7 @@ export function LlmConfigPanel({
                 setApiKey(e.target.value);
               }}
               placeholder="API key"
+              aria-label="API Key"
               autoComplete="off"
               className="h-9 flex-1 rounded-lg border border-border bg-background px-3 text-sm text-foreground placeholder:text-muted-foreground/40 transition-colors focus:border-primary/40 focus:outline-none focus:ring-1 focus:ring-primary/20"
             />

@@ -45,9 +45,20 @@ export async function openCdpConnection(page: CrawlPage): Promise<CdpConnection>
 
   const ws = await import('ws');
   const socket = new ws.default(target.webSocketDebuggerUrl);
+  const CDP_CONNECT_TIMEOUT_MS = 10_000;
   await new Promise<void>((resolve, reject) => {
-    socket.on('open', resolve);
-    socket.on('error', reject);
+    const timer = setTimeout(() => {
+      socket.close();
+      reject(new Error(`WebSocket connection timed out after ${String(CDP_CONNECT_TIMEOUT_MS)}ms`));
+    }, CDP_CONNECT_TIMEOUT_MS);
+    socket.on('open', () => {
+      clearTimeout(timer);
+      resolve();
+    });
+    socket.on('error', (err: Error) => {
+      clearTimeout(timer);
+      reject(err);
+    });
   });
 
   let msgId = 0;

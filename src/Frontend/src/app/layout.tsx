@@ -36,13 +36,14 @@ export const metadata: Metadata = {
   },
 };
 
-const gaId = process.env.NEXT_PUBLIC_GA_ID;
+const rawGaId = process.env.NEXT_PUBLIC_GA_ID;
+const gaId = rawGaId != null && (/^G-[A-Z0-9]+$/.test(rawGaId) || /^UA-\d+-\d+$/.test(rawGaId)) ? rawGaId : undefined;
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
-        {gaId != null && gaId !== '' && (
+        {gaId != null && (
           <>
             <Script src={`https://www.googletagmanager.com/gtag/js?id=${gaId}`} strategy="afterInteractive" />
             <Script id="gtag-init" strategy="afterInteractive">

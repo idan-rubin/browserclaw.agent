@@ -16,6 +16,9 @@ on:
       - '.github/workflows/deploy.yml'
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 # Cancel in-progress runs when a new commit is pushed
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -37,7 +40,7 @@ jobs:
       sha_short: ${{ steps.changes.outputs.sha_short }}
 
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           fetch-depth: 0
 
@@ -105,7 +108,7 @@ jobs:
     if: needs.detect-changes.outputs.any_changed == 'true'
 
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
       - name: Check deploy config
         env:

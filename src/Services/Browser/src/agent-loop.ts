@@ -460,9 +460,13 @@ async function getFinalSummary(prompt: string, history: AgentStep[]): Promise<st
   }
 }
 
+export interface PageHolder {
+  page: CrawlPage;
+}
+
 export async function runAgentLoop(
   prompt: string,
-  page: CrawlPage,
+  pageOrHolder: CrawlPage | PageHolder,
   emit: (event: string, data: unknown) => void,
   signal: AbortSignal,
   waitForUser?: () => Promise<string>,
@@ -470,9 +474,15 @@ export async function runAgentLoop(
   domainSkill?: CatalogSkill | null,
   maxSteps = MAX_STEPS,
 ): Promise<AgentLoopResult> {
+  // Accept either a bare CrawlPage or a PageHolder. When a PageHolder is
+  // provided the caller's reference is updated on tab switches.
+  const holder: PageHolder =
+    'page' in pageOrHolder && typeof (pageOrHolder as { page: unknown }).page === 'object'
+      ? (pageOrHolder as { page: CrawlPage })
+      : { page: pageOrHolder as CrawlPage };
   const history: AgentStep[] = [];
   const startTime = Date.now();
-  const tabManager = browser !== undefined ? new TabManager(page) : null;
+  const tabManager = browser !== undefined ? new TabManager(holder.page) : null;
   let consecutiveParseFailures = 0;
   const MAX_PARSE_FAILURES = 3;
 
@@ -515,15 +525,15 @@ Respond with JSON: {"plan": "your plan here"}`,
       };
     }
 
-    if (await detectPopup(page)) {
-      await dismissPopup(page);
+    if (await detectPopup(holder.page)) {
+      await dismissPopup(holder.page);
     }
 
-    let snapshot = await safeSnapshot(page);
-    const url = await page.url();
-    const title = await page.title();
+    let snapshot = await safeSnapshot(holder.page);
+    const url = await holder.page.url();
+    const title = await holder.page.title();
 
-    const domText = await getPageText(page);
+    const domText = await getPageText(holder.page);
     const antiBotType = detectAntiBot(domText);
     if (antiBotType !== null) {
       snapshot = enrichSnapshot(snapshot, domText, antiBotType);
@@ -600,8 +610,8 @@ Respond with JSON: {"plan": "your plan here"}`,
       const agentStep: AgentStep = {
         step,
         action,
-        url: await page.url(),
-        page_title: await page.title(),
+        url: await holder.page.url(),
+        page_title: await holder.page.title(),
         timestamp: new Date().toISOString(),
       };
 
@@ -673,13 +683,13 @@ Respond with JSON: {"plan": "your plan here"}`,
       // --- Special actions (break batch — need new snapshot) ---
 
       if (action.action === 'press_and_hold') {
-        await pressAndHold(page);
+        await pressAndHold(holder.page);
         step++;
         break;
       }
 
       if (action.action === 'click_cloudflare') {
-        await clickCloudflareCheckbox(page);
+        await clickCloudflareCheckbox(holder.page);
         step++;
         break;
       }
@@ -687,13 +697,13 @@ Respond with JSON: {"plan": "your plan here"}`,
       // --- Normal actions ---
 
       try {
-        await executeAction(action, page);
+        await executeAction(action, holder.page);
 
         // After typing, detect autocomplete/combobox fields
         if (action.action === 'type') {
-          await page.waitFor({ timeMs: 400 });
+          await holder.page.waitFor({ timeMs: 400 });
           try {
-            const postTypeSnapshot = (await page.snapshot({ interactive: true, compact: true })).snapshot;
+            const postTypeSnapshot = (await holder.page.snapshot({ interactive: true, compact: true })).snapshot;
             if (/combobox|listbox|aria-autocomplete|suggestion|dropdown/i.test(postTypeSnapshot)) {
               agentStep.action.error_feedback =
                 'AUTOCOMPLETE DETECTED: A dropdown/suggestion list appeared after typing. Wait for it to fully load, then click the correct suggestion. Do NOT press Enter.';
@@ -709,10 +719,10 @@ Respond with JSON: {"plan": "your plan here"}`,
         logger.error({ step, action: action.action, error: message }, 'Action execution failed');
         emit('step_error', { step, action: action.action, error: message });
         agentStep.action.error_feedback = message;
-        await page.waitFor({ timeMs: 1000 });
+        await holder.page.waitFor({ timeMs: 1000 });
 
-        if (await detectPopup(page)) {
-          await dismissPopup(page);
+        if (await detectPopup(holder.page)) {
+          await dismissPopup(holder.page);
         }
         step++;
         break; // Break batch on failure — need new snapshot
@@ -725,7 +735,7 @@ Respond with JSON: {"plan": "your plan here"}`,
           try {
             const newUrl = await newPage.url();
             const newTitle = await newPage.title();
-            page = newPage;
+            holder.page = newPage;
             history.push({
               step,
               action: { action: 'navigate', reasoning: `Click opened a new tab: ${newTitle}` },
@@ -745,7 +755,7 @@ Respond with JSON: {"plan": "your plan here"}`,
       }
 
       const waitMs = getWaitMs(action.action);
-      await page.waitFor({ timeMs: waitMs });
+      await holder.page.waitFor({ timeMs: waitMs });
       step++;
     }
   }

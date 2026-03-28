@@ -275,9 +275,10 @@ async function startAgentLoop(sessionId: string): Promise<void> {
     const runAllLlmWork = async () => {
       resetLLMCallCount();
       const waitForUser = () => waitForUserResponse(sessionId);
+      const pageHolder = { page: managed.page };
       const result = await runAgentLoop(
         managed.prompt,
-        managed.page,
+        pageHolder,
         emitter,
         managed.abortController.signal,
         waitForUser,
@@ -286,6 +287,8 @@ async function startAgentLoop(sessionId: string): Promise<void> {
       );
       const llmCalls = getLLMCallCount();
 
+      // Sync back the page reference in case the agent switched tabs
+      managed.page = pageHolder.page;
       managed.result = result;
       managed.status = result.success ? 'completed' : 'failed';
 
