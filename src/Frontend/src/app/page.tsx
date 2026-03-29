@@ -258,9 +258,7 @@ export default function HomePage() {
                 {!hasApiKey && prompt.trim() && (
                   <span className="text-xs text-amber-500/80">Enter your API key below to run</span>
                 )}
-                <span className="hidden text-sm text-muted-foreground/40 sm:inline">
-                  Shift+Enter for new line
-                </span>
+                <span className="hidden text-sm text-muted-foreground/40 sm:inline">Shift+Enter for new line</span>
                 {prompt.trim() && (
                   <button
                     onClick={() => {
