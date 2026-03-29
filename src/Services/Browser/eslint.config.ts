@@ -1,9 +1,7 @@
-import type { ConfigArray } from 'typescript-eslint';
-
 import eslintConfigPrettier from 'eslint-config-prettier';
 import tseslint from 'typescript-eslint';
 
-const config: ConfigArray = tseslint.config(
+const config = tseslint.config(
   {
     ignores: ['dist/', 'node_modules/'],
   },
@@ -12,7 +10,9 @@ const config: ConfigArray = tseslint.config(
   {
     languageOptions: {
       parserOptions: {
-        projectService: true,
+        projectService: {
+          allowDefaultProject: ['eslint.config.ts', 'scripts/*.ts'],
+        },
         tsconfigRootDir: import.meta.dirname,
       },
       sourceType: 'module',
