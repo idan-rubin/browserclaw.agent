@@ -63,7 +63,7 @@ const PROVIDERS: ProviderConfig[] = [
   },
   {
     provider: 'openai-oauth',
-    label: 'OpenAI (ChatGPT Subscription)',
+    label: 'OpenAI (Subscription)',
     baseURL: 'https://chatgpt.com/backend-api',
     apiKeyEnv: 'OPENAI_OAUTH_TOKEN',
     useMaxCompletionTokens: true,
