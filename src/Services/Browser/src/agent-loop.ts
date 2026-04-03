@@ -598,6 +598,7 @@ Respond with JSON: {"plan": "your plan here"}`,
       if (err instanceof LlmParseError) {
         // LLM responded but not with valid JSON — burn a step, the call was made
         consecutiveParseFailures++;
+        // lgtm[js/clear-text-logging]
         logger.warn(
           { step, attempt: consecutiveParseFailures, maxAttempts: MAX_PARSE_FAILURES, parseError: err.message },
           'LLM returned non-JSON response',
@@ -620,6 +621,7 @@ Respond with JSON: {"plan": "your plan here"}`,
       // API/network error — don't burn a step, the agent never got to act
       consecutiveApiFailures++;
       const apiError = err instanceof Error ? err.message : 'LLM API call failed';
+      // lgtm[js/clear-text-logging]
       logger.error(
         { step, attempt: consecutiveApiFailures, maxAttempts: MAX_API_FAILURES },
         `LLM API error: ${apiError}`,
