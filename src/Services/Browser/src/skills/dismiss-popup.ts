@@ -4,7 +4,7 @@ import { logger } from '../logger.js';
 export async function detectPopup(page: CrawlPage): Promise<boolean> {
   return (await page.evaluate(`
     (function() {
-      var all = document.querySelectorAll('[role="dialog"], [role="alertdialog"], [class*="modal"], [class*="popup"], [class*="overlay"], [class*="banner"], [class*="consent"], form[action*="consent"]');
+      var all = document.querySelectorAll('[role="dialog"], [role="alertdialog"], [class*="modal"], [class*="popup"], [class*="overlay"], [class*="banner"], [class*="consent"], [class*="picker"], [class*="datepicker"], [class*="date-picker"], [class*="calendar"], [role="listbox"], form[action*="consent"]');
       for (var i = 0; i < all.length; i++) {
         var el = all[i];
         var style = window.getComputedStyle(el);
@@ -91,10 +91,25 @@ export async function dismissPopup(page: CrawlPage): Promise<boolean> {
     `)) as boolean;
 
     if (dismissed) {
-      logger.info('dismiss-popup: closed a popup');
+      logger.info('dismiss-popup: closed a popup via click');
       await page.waitFor({ timeMs: 500 });
+      return true;
     }
-    return dismissed;
+
+    // Fallback: press Escape to dismiss popups/date pickers/overlays that have no close button
+    logger.info('dismiss-popup: no close button found, trying Escape key');
+    await page.press('Escape');
+    await page.waitFor({ timeMs: 500 });
+
+    // Check if the popup was dismissed
+    const stillOpen = await detectPopup(page);
+    if (!stillOpen) {
+      logger.info('dismiss-popup: closed popup via Escape key');
+      return true;
+    }
+
+    logger.info('dismiss-popup: Escape did not close the popup');
+    return false;
   } catch (err) {
     logger.error({ err }, 'dismiss-popup failed');
     return false;
