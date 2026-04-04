@@ -5,7 +5,7 @@ import { detectPopup, dismissPopup } from './skills/dismiss-popup.js';
 import { detectLoop } from './skills/loop-detection.js';
 import { diagnoseStuckAgent, formatRecovery } from './skills/recovery.js';
 import { TabManager } from './skills/tab-manager.js';
-import { llmJson } from './llm.js';
+import { llmJson, sanitizeErrorText } from './llm.js';
 import { LlmParseError } from './types.js';
 import type { AgentAction, AgentStep, AgentLoopResult, CatalogSkill } from './types.js';
 import { logger } from './logger.js';
@@ -146,12 +146,18 @@ async function safeSnapshot(page: CrawlPage): Promise<string> {
   try {
     snapshot = (await page.snapshot({ interactive: true, compact: true })).snapshot;
   } catch (firstErr) {
-    logger.warn({ error: firstErr instanceof Error ? firstErr.message : 'unknown' }, 'Snapshot failed — retrying');
+    logger.warn(
+      { error: sanitizeErrorText(firstErr instanceof Error ? firstErr.message : 'unknown') },
+      'Snapshot failed — retrying',
+    );
     await page.waitFor({ timeMs: PAGE_READY_WAIT_MS });
     try {
       snapshot = (await page.snapshot({ interactive: true, compact: true })).snapshot;
     } catch (err) {
-      logger.error({ error: err instanceof Error ? err.message : 'unknown' }, 'Snapshot failed after retry');
+      logger.error(
+        { error: sanitizeErrorText(err instanceof Error ? err.message : 'unknown') },
+        'Snapshot failed after retry',
+      );
       return '[Snapshot unavailable — page may be loading]';
     }
   }
@@ -546,7 +552,10 @@ Respond with JSON: {"plan": "your plan here"}`,
       emit('plan', { prompt, plan: plan.plan });
     }
   } catch (err) {
-    logger.error({ error: err instanceof Error ? err.message : 'unknown' }, 'Failed to generate plan');
+    logger.error(
+      { error: sanitizeErrorText(err instanceof Error ? err.message : 'unknown') },
+      'Failed to generate plan',
+    );
   }
 
   let step = 0;
@@ -609,7 +618,10 @@ Respond with JSON: {"plan": "your revised plan here"}`,
             logger.info({ step }, 'Agent re-planned');
           }
         } catch (err) {
-          logger.warn({ error: err instanceof Error ? err.message : 'unknown' }, 'Re-planning failed');
+          logger.warn(
+            { error: sanitizeErrorText(err instanceof Error ? err.message : 'unknown') },
+            'Re-planning failed',
+          );
         }
       }
     }
@@ -629,7 +641,10 @@ Respond with JSON: {"plan": "your revised plan here"}`,
       try {
         tabCount = (await browser.tabs()).length;
       } catch (err) {
-        logger.warn({ error: err instanceof Error ? err.message : 'unknown' }, 'Failed to get tab count');
+        logger.warn(
+          { error: sanitizeErrorText(err instanceof Error ? err.message : 'unknown') },
+          'Failed to get tab count',
+        );
       }
     }
     const skillForStep = step <= SKILL_INJECT_MAX_STEP ? domainSkill : undefined;
@@ -823,7 +838,10 @@ Respond with JSON: {"plan": "your revised plan here"}`,
               break; // Break batch — agent needs to see the dropdown
             }
           } catch (snapErr) {
-            logger.warn({ error: snapErr instanceof Error ? snapErr.message : 'unknown' }, 'Post-type snapshot failed');
+            logger.warn(
+              { error: sanitizeErrorText(snapErr instanceof Error ? snapErr.message : 'unknown') },
+              'Post-type snapshot failed',
+            );
           }
         }
       } catch (err) {

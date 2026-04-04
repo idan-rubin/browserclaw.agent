@@ -13,7 +13,7 @@ const LLM_TIMEOUT_MS = parseInt(process.env.LLM_TIMEOUT_MS ?? '30000', 10);
 const SENSITIVE_PATTERN =
   /(?:eyJ[A-Za-z0-9_-]{20,}|sk-[A-Za-z0-9]{20,}|gsk_[A-Za-z0-9]{20,}|xox[bpas]-[A-Za-z0-9-]{20,}|AIza[A-Za-z0-9_-]{20,}|ghp_[A-Za-z0-9]{20,}|[A-Za-z0-9+/]{40,}={0,2})/g;
 
-function sanitizeErrorText(text: string): string {
+export function sanitizeErrorText(text: string): string {
   return text.replace(SENSITIVE_PATTERN, '[REDACTED]').slice(0, 500);
 }
 
