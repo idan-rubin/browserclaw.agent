@@ -3,6 +3,7 @@ import { pressAndHold, detectAntiBot, enrichSnapshot, getPageText } from './skil
 import { clickCloudflareCheckbox } from './skills/cloudflare-checkbox.js';
 import { detectPopup, dismissPopup } from './skills/dismiss-popup.js';
 import { detectLoop } from './skills/loop-detection.js';
+import { diagnoseStuckAgent, formatRecovery } from './skills/recovery.js';
 import { TabManager } from './skills/tab-manager.js';
 import { llmJson } from './llm.js';
 import { LlmParseError } from './types.js';
@@ -177,8 +178,11 @@ async function safeSnapshot(page: CrawlPage): Promise<string> {
 }
 
 const SKILL_INJECT_MAX_STEP = 2;
+const PLAN_INJECT_MAX_STEP = 8;
 const HISTORY_RECENT_WINDOW = 10;
 const MAX_ACTIONS_PER_STEP = 4;
+const REPLAN_CHECK_INTERVAL = 8;
+const REPLAN_FAILURE_THRESHOLD = 3;
 
 function truncateHistory(history: AgentStep[]): string {
   if (history.length <= HISTORY_RECENT_WINDOW) {
@@ -198,6 +202,22 @@ function truncateHistory(history: AgentStep[]): string {
   out += '  Earlier steps summary: ';
   out += older.map((s) => `${s.action.action}${s.action.error_feedback !== undefined ? '(FAILED)' : ''}`).join(' → ');
   out += '\n';
+
+  // Include milestone steps from older history — steps where significant findings were recorded
+  const milestones = older.filter(
+    (s) =>
+      s.action.action === 'navigate' ||
+      (s.action.memory !== undefined && s.action.memory.length > 50) ||
+      s.action.action === 'type',
+  );
+  if (milestones.length > 0) {
+    out += '  Key earlier milestones:\n';
+    for (const m of milestones.slice(-5)) {
+      out += `    Step ${String(m.step)}: [${m.action.action}] ${m.action.reasoning.substring(0, 150)}`;
+      if (m.url !== undefined) out += ` (${m.url})`;
+      out += '\n';
+    }
+  }
 
   // Include the last older step's reasoning as context bridge
   const lastOlderStep = older[older.length - 1];
@@ -235,6 +255,7 @@ interface BuildUserMessageOptions {
   domainSkill?: CatalogSkill | null;
   stepsRemaining?: number;
   maxSteps?: number;
+  recoveryMessage?: string | null;
 }
 
 function buildUserMessage(
@@ -245,7 +266,7 @@ function buildUserMessage(
   title: string,
   opts?: BuildUserMessageOptions,
 ): string {
-  const { plan, tabCount, domainSkill, stepsRemaining, maxSteps: totalSteps } = opts ?? {};
+  const { plan, tabCount, domainSkill, stepsRemaining, maxSteps: totalSteps, recoveryMessage } = opts ?? {};
   let message = `Task: ${prompt}\n`;
 
   if (plan !== undefined && plan !== null && plan !== '') {
@@ -263,6 +284,10 @@ function buildUserMessage(
     (totalSteps - stepsRemaining) / totalSteps >= 0.75
   ) {
     message += `\n⚠ You've used 75% of your step budget. Start consolidating your findings. If you have enough data, use "done" soon.\n`;
+  }
+
+  if (recoveryMessage !== undefined && recoveryMessage !== null) {
+    message += recoveryMessage;
   }
 
   if (domainSkill !== undefined && domainSkill !== null) {
@@ -525,6 +550,7 @@ Respond with JSON: {"plan": "your plan here"}`,
   }
 
   let step = 0;
+  let recentFailureCount = 0;
   while (step < maxSteps) {
     if (signal.aborted) {
       return {
@@ -551,6 +577,47 @@ Respond with JSON: {"plan": "your plan here"}`,
 
     emit('thinking', { step, message: `Analyzing page: ${title}` });
 
+    // --- Re-planning checkpoint ---
+    // Every REPLAN_CHECK_INTERVAL steps, if we've had failures, generate a fresh plan
+    if (
+      step > 0 &&
+      step % REPLAN_CHECK_INTERVAL === 0 &&
+      recentFailureCount >= REPLAN_FAILURE_THRESHOLD
+    ) {
+      try {
+        const lastMemory = getLastMemory(history);
+        const recentSummary = history
+          .slice(-6)
+          .map((s) => `${s.action.action}${s.action.error_feedback !== undefined ? '(FAILED)' : ''}: ${s.action.reasoning}`)
+          .join('\n');
+
+        const replan = await llmJson<{ plan: string }>({
+          system: `You are a browser automation planner. The agent is stuck and needs a new plan.
+Analyze what's been tried, what failed, and suggest a DIFFERENT approach.
+Don't repeat strategies that already failed. Be creative — try different site sections, different URLs, different interaction patterns.
+Respond with JSON: {"plan": "your revised plan here"}`,
+          message: `Original task: ${prompt}\n\nOriginal plan: ${planText ?? 'none'}\n\nCurrent page: ${title} (${url})\n\nMemory: ${lastMemory ?? 'none'}\n\nRecent actions:\n${recentSummary}\n\nStep ${String(step)} of ${String(maxSteps)} — ${String(recentFailureCount)} recent failures.`,
+          maxTokens: 256,
+        });
+        if (replan.plan !== '') {
+          planText = replan.plan;
+          recentFailureCount = 0;
+          emit('replan', { step, plan: replan.plan });
+          logger.info({ step }, 'Agent re-planned');
+        }
+      } catch (err) {
+        logger.warn({ err }, 'Re-planning failed');
+      }
+    }
+
+    // --- Recovery diagnosis ---
+    let recoveryMessage: string | null = null;
+    const recovery = diagnoseStuckAgent(history, url);
+    if (recovery !== null) {
+      recoveryMessage = formatRecovery(recovery);
+      logger.info({ step, diagnosis: recovery.diagnosis }, 'Recovery strategy triggered');
+    }
+
     let tabCount: number | undefined;
     if (browser !== undefined) {
       try {
@@ -560,7 +627,8 @@ Respond with JSON: {"plan": "your plan here"}`,
       }
     }
     const skillForStep = step <= SKILL_INJECT_MAX_STEP ? domainSkill : undefined;
-    const planForStep = step <= SKILL_INJECT_MAX_STEP ? planText : null;
+    // Keep plan available for longer — it's cheap context and prevents drift
+    const planForStep = step <= PLAN_INJECT_MAX_STEP ? planText : null;
     const stepsRemaining = maxSteps - step - 1;
     const userMessage = buildUserMessage(prompt, snapshot, history, url, title, {
       plan: planForStep,
@@ -568,6 +636,7 @@ Respond with JSON: {"plan": "your plan here"}`,
       domainSkill: skillForStep,
       stepsRemaining,
       maxSteps,
+      recoveryMessage,
     });
 
     // On the last step, force the agent to produce a final answer
@@ -600,6 +669,7 @@ Respond with JSON: {"plan": "your plan here"}`,
       if (loopNudge !== null) {
         logger.warn({ step, level: loopNudge.level }, 'Loop nudge');
         actions[0].error_feedback = loopNudge.message;
+        recentFailureCount++;
       }
     } catch (err) {
       if (err instanceof LlmParseError) {
@@ -755,6 +825,7 @@ Respond with JSON: {"plan": "your plan here"}`,
         logger.error({ step, action: action.action, error: message }, 'Action execution failed');
         emit('step_error', { step, action: action.action, error: message });
         agentStep.action.error_feedback = message;
+        recentFailureCount++;
         await holder.page.waitFor({ timeMs: 1000 });
 
         if (await detectPopup(holder.page)) {

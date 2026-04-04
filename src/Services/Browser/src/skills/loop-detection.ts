@@ -47,6 +47,21 @@ export function detectLoop(action: { action: string; ref?: string }, history: Ag
     };
   }
 
+  // Semantic loop: alternating between 2-3 failing actions (not exact same ref, but same type)
+  if (window.length >= 6) {
+    const failedRecent = window.slice(-6).filter((h) => h.action.error_feedback !== undefined);
+    if (failedRecent.length >= 4) {
+      const failedTypes = new Set(failedRecent.map((h) => h.action.action));
+      if (failedTypes.size <= 2) {
+        return {
+          level: 'warning',
+          message:
+            'You are alternating between the same types of actions and they keep failing. This approach is not working — you need a fundamentally different strategy. Try: navigating to a different page, using the site search, scrolling to find different elements, or pressing Escape to clear overlays.',
+        };
+      }
+    }
+  }
+
   // Stagnant page detection: same URL for 5+ consecutive steps
   const recentUrls = window.slice(-5).map((h) => h.url);
   if (recentUrls.length >= 5 && recentUrls.every((u) => u === recentUrls[0])) {

@@ -1,0 +1,194 @@
+import type { AgentStep } from '../types.js';
+import { logger } from '../logger.js';
+
+/**
+ * Analyzes recent agent history and suggests concrete recovery strategies
+ * when the agent appears stuck. Unlike loop-detection (which just nudges),
+ * this provides actionable escape plans based on failure patterns.
+ */
+
+export interface RecoveryStrategy {
+  diagnosis: string;
+  suggestions: string[];
+}
+
+/**
+ * Analyze the last N steps to detect *why* the agent is stuck
+ * and suggest concrete recovery actions.
+ */
+export function diagnoseStuckAgent(history: AgentStep[], currentUrl: string): RecoveryStrategy | null {
+  if (history.length < 6) return null;
+
+  const recent = history.slice(-8);
+
+  // Pattern 1: Alternating between two failing approaches
+  const alternatingFailure = detectAlternatingFailures(recent);
+  if (alternatingFailure !== null) return alternatingFailure;
+
+  // Pattern 2: Repeated clicks on different refs that all fail (wrong page section)
+  const scatterClicks = detectScatterClicks(recent);
+  if (scatterClicks !== null) return scatterClicks;
+
+  // Pattern 3: Typing in search fields but never finding/clicking results
+  const searchWithoutResults = detectSearchWithoutResults(recent);
+  if (searchWithoutResults !== null) return searchWithoutResults;
+
+  // Pattern 4: Stuck on same URL with no progress (diverse actions but no advancement)
+  const stagnation = detectStagnation(recent, currentUrl);
+  if (stagnation !== null) return stagnation;
+
+  // Pattern 5: Navigation loops (going back and forth between pages)
+  const navLoop = detectNavigationLoop(recent);
+  if (navLoop !== null) return navLoop;
+
+  return null;
+}
+
+function detectAlternatingFailures(recent: AgentStep[]): RecoveryStrategy | null {
+  const failed = recent.filter((s) => s.action.error_feedback !== undefined);
+  if (failed.length < 3) return null;
+
+  // Check if the agent is alternating between 2-3 different actions that all fail
+  const failedActions = new Set(failed.map((s) => s.action.action));
+  if (failedActions.size <= 3 && failed.length >= 4) {
+    return {
+      diagnosis: 'You are alternating between approaches that all fail.',
+      suggestions: [
+        'STOP trying variations of the same approach.',
+        'Scroll the page to find different interactive elements you haven\'t tried.',
+        'Try navigating to the page via a different URL or site section.',
+        'If elements exist but clicks fail, there may be an overlay blocking them — try pressing Escape first.',
+        'Use the site\'s main navigation menu or search bar instead of the current approach.',
+      ],
+    };
+  }
+  return null;
+}
+
+function detectScatterClicks(recent: AgentStep[]): RecoveryStrategy | null {
+  const clicks = recent.filter((s) => s.action.action === 'click');
+  const failedClicks = clicks.filter((s) => s.action.error_feedback !== undefined);
+
+  if (failedClicks.length >= 3) {
+    // Many different refs tried, all failing
+    const uniqueRefs = new Set(failedClicks.map((s) => s.action.ref));
+    if (uniqueRefs.size >= 3) {
+      return {
+        diagnosis: 'Multiple click attempts on different elements are failing.',
+        suggestions: [
+          'The elements may not be clickable — check if they are behind an overlay or iframe.',
+          'Try scrolling to reveal the elements before clicking.',
+          'The page structure may have changed since your last snapshot. Wait and get a fresh snapshot.',
+          'Try using keyboard navigation (Tab + Enter) instead of clicking.',
+          'Navigate directly to a URL if you know where you need to go.',
+        ],
+      };
+    }
+  }
+  return null;
+}
+
+function detectSearchWithoutResults(recent: AgentStep[]): RecoveryStrategy | null {
+  const typeActions = recent.filter((s) => s.action.action === 'type');
+  const clickActions = recent.filter((s) => s.action.action === 'click');
+
+  // Typed in search fields multiple times but few or no successful clicks after
+  if (typeActions.length >= 2 && clickActions.length <= 1) {
+    return {
+      diagnosis: 'You have typed search queries but are not clicking on results.',
+      suggestions: [
+        'After typing, wait for autocomplete suggestions to appear and click the matching option.',
+        'If no autocomplete appears, press Enter to submit the search.',
+        'After submitting, scroll down to find the search results section.',
+        'The search results may be in a different format than expected — look for list items, cards, or links.',
+        'Try a simpler or shorter search query.',
+      ],
+    };
+  }
+  return null;
+}
+
+function detectStagnation(recent: AgentStep[], currentUrl: string): RecoveryStrategy | null {
+  const sameUrlSteps = recent.filter((s) => s.url === currentUrl);
+  if (sameUrlSteps.length < 6) return null;
+
+  // On the same URL for 6+ steps with mixed actions but no clear progress
+  const actions = new Set(sameUrlSteps.map((s) => s.action.action));
+  const hasErrors = sameUrlSteps.some((s) => s.action.error_feedback !== undefined);
+
+  if (hasErrors && actions.size >= 2) {
+    return {
+      diagnosis: `You have been on this same page for ${String(sameUrlSteps.length)}+ steps without making progress.`,
+      suggestions: [
+        'This page may not have what you need. Navigate to a different section of the site.',
+        'Try using the site\'s search functionality to find the content directly.',
+        'Check if the page requires scrolling to reveal the content you need.',
+        'The page may require interaction in a specific order (e.g., select a category before results appear).',
+        'Consider starting fresh: navigate directly to the target URL if you can construct it.',
+      ],
+    };
+  }
+  return null;
+}
+
+function detectNavigationLoop(recent: AgentStep[]): RecoveryStrategy | null {
+  const urls = recent.map((s) => s.url).filter(Boolean) as string[];
+  if (urls.length < 4) return null;
+
+  // Detect A→B→A→B pattern
+  const urlSet = new Set(urls);
+  if (urlSet.size === 2 && urls.length >= 4) {
+    const [urlA, urlB] = [...urlSet];
+    // Check if alternating
+    let alternating = true;
+    for (let i = 1; i < urls.length; i++) {
+      if (urls[i] === urls[i - 1]) {
+        alternating = false;
+        break;
+      }
+    }
+    if (alternating) {
+      return {
+        diagnosis: 'You are navigating back and forth between two pages without making progress.',
+        suggestions: [
+          'Pick ONE of the two pages and commit to completing your task there.',
+          `Stay on the page that has the content you need and work through it systematically.`,
+          'If going back resets the page state (filters, scroll position), try a different approach that doesn\'t require going back.',
+          'Extract all needed information from each page before navigating away.',
+        ],
+      };
+    }
+  }
+
+  // Detect revisiting the same URL 3+ times
+  const urlCounts = new Map<string, number>();
+  for (const url of urls) {
+    urlCounts.set(url, (urlCounts.get(url) ?? 0) + 1);
+  }
+  for (const [url, count] of urlCounts) {
+    if (count >= 3) {
+      return {
+        diagnosis: `You have visited the same page 3+ times: ${url}`,
+        suggestions: [
+          'You are going in circles. Extract everything you need from this page in ONE visit.',
+          'If the page resets when you navigate away, find a way to accomplish your goal without leaving.',
+          'Consider a completely different approach to the task.',
+        ],
+      };
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Format a recovery strategy into a message that gets injected into the LLM context.
+ */
+export function formatRecovery(strategy: RecoveryStrategy): string {
+  let msg = `\n🔧 RECOVERY NEEDED — ${strategy.diagnosis}\n`;
+  msg += 'Try one of these strategies:\n';
+  for (const suggestion of strategy.suggestions) {
+    msg += `  • ${suggestion}\n`;
+  }
+  return msg;
+}
