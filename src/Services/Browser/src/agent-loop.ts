@@ -76,11 +76,13 @@ Complex tasks:
 - Your "answer" for complex tasks should be structured: use sections, bullet points, or a ranking — not a single sentence.
 
 Result scoping:
-- If the task asks you to "find", "search for", or "look for" multiple items without specifying a count, collect exactly 5 results with key details — then stop and deliver.
-- Do NOT endlessly browse, paginate, or click into dozens of listings. 5 well-detailed results beats 20 shallow ones.
+- When collecting multiple results (listings, products, flights, etc.), work in batches: gather results from the current page, then decide whether to continue.
+- After each batch, check: are new results still relevant and distinct? If results are repeating, becoming less relevant, or the page has no more content — stop and present what you have.
+- Do NOT endlessly paginate or click into dozens of listings. Quality beats quantity — well-detailed results with key attributes are more useful than many shallow ones.
 - For each result, extract: name/title, price (if applicable), key attributes, and URL.
-- Once you have 5 complete results, use "done" immediately with a structured answer. Don't keep looking for more.
-- If the task specifies a number (e.g. "find 3 hotels"), use that number instead of 5.
+- If the task specifies a number (e.g. "find 3 hotels"), use that exact number.
+- If no number is specified, use your judgment: stop when new results aren't adding value. 3 great results is better than getting stuck trying to find 10.
+- IMPORTANT: If you have results and the next page is slow, blocked, or repeating — present what you have immediately. Never get stuck chasing more results when you already have useful ones.
 
 Page processing:
 - Extract ALL useful data from a page before navigating away. Don't visit the same page twice.
@@ -561,13 +563,14 @@ export async function runAgentLoop(
 
 Step 1 — Refine the goal into a SMART task:
 - If the prompt is vague or open-ended ("find apartments", "look for flights", "show me hotels"), make it specific:
-  • Add a result limit: "Collect the top 5 results" (unless the user specified a number)
   • Specify what details to extract for each result (price, name, URL, key attributes)
   • Scope to one site or one search
+  • Define a clear stopping point: collect results until new ones stop being relevant or distinct, then present findings
+  • If the user specified a count, use it. Otherwise, don't hardcode a number — let the agent decide when it has enough.
 - If the prompt is already specific ("book a flight from NYC to LAX on Dec 15"), return it unchanged.
 - Examples:
-  • "find apartments in Chelsea" → "Search for apartments in Chelsea on a major listings site. Collect the top 5 listings with: name/address, price, bedrooms, and URL."
-  • "compare laptops" → "Search for laptops on an electronics site. Compare the top 5 by: name, price, specs, and rating."
+  • "find apartments in Chelsea" → "Search for apartments in Chelsea on a major listings site. Collect listings with: name/address, price, bedrooms, and URL. Stop when results start repeating or losing relevance."
+  • "compare laptops" → "Search for laptops on an electronics site. Compare options by: name, price, specs, and rating. Gather enough to make a meaningful comparison."
   • "book a table at Nobu" → "book a table at Nobu" (already specific)
 
 Step 2 — Create an action plan:
