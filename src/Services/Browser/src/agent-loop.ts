@@ -151,7 +151,7 @@ async function safeSnapshot(page: CrawlPage): Promise<string> {
     try {
       snapshot = (await page.snapshot({ interactive: true, compact: true })).snapshot;
     } catch (err) {
-      logger.error({ err }, 'Snapshot failed after retry');
+      logger.error({ error: err instanceof Error ? err.message : 'unknown' }, 'Snapshot failed after retry');
       return '[Snapshot unavailable — page may be loading]';
     }
   }
@@ -546,7 +546,7 @@ Respond with JSON: {"plan": "your plan here"}`,
       emit('plan', { prompt, plan: plan.plan });
     }
   } catch (err) {
-    logger.error({ err }, 'Failed to generate plan');
+    logger.error({ error: err instanceof Error ? err.message : 'unknown' }, 'Failed to generate plan');
   }
 
   let step = 0;
@@ -609,7 +609,7 @@ Respond with JSON: {"plan": "your revised plan here"}`,
             logger.info({ step }, 'Agent re-planned');
           }
         } catch (err) {
-          logger.warn({ err }, 'Re-planning failed');
+          logger.warn({ error: err instanceof Error ? err.message : 'unknown' }, 'Re-planning failed');
         }
       }
     }
@@ -629,7 +629,7 @@ Respond with JSON: {"plan": "your revised plan here"}`,
       try {
         tabCount = (await browser.tabs()).length;
       } catch (err) {
-        logger.warn({ err }, 'Failed to get tab count');
+        logger.warn({ error: err instanceof Error ? err.message : 'unknown' }, 'Failed to get tab count');
       }
     }
     const skillForStep = step <= SKILL_INJECT_MAX_STEP ? domainSkill : undefined;
